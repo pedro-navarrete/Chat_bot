@@ -84,6 +84,14 @@ async def evolution_webhook(request: Request):
                 msg_id=msg.message_id,
                 provider=msg.provider,
             )
+            # Enviar mensaje de confirmación al usuario
+            try:
+                provider.send_text(
+                    to=msg.from_number,
+                    text="Documento recibido y guardado correctamente. ¡Gracias por enviar tus documentos!"
+                )
+            except Exception as send_ex:
+                logger.error(f"Error enviando mensaje de confirmación: {send_ex}")
         except Exception as ex:
             logger.error(
                 f"Error subiendo media message_id={msg.message_id}: {ex}"
@@ -145,6 +153,14 @@ async def whatsapp_webhook(payload: WebhookPayload):
                 msg_id=msg.message_id,
                 provider=msg.provider,
             )
+            # Enviar mensaje de confirmación al usuario
+            try:
+                provider.send_text(
+                    to=msg.from_number,
+                    text="Documento recibido y guardado correctamente. ¡Gracias por enviar tus documentos!"
+                )
+            except Exception as send_ex:
+                logger.error(f"Error enviando mensaje de confirmación: {send_ex}")
             message_dedup.add(msg.message_id)
         except Exception as ex:
             logger.error(f"Error procesando mensaje {msg.message_id}: {ex}")
