@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: chatbot_postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: evolution
@@ -16,41 +17,80 @@ services:
 
   redis:
     image: redis:7-alpine
+    container_name: chatbot_redis
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   evolution-api:
     image: evoapicloud/evolution-api:v2.3.7
+    container_name: evolution_api
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     ports:
       - "8080:8080"
     environment:
-      - SERVER_URL=http://localhost:8080
+      # URL pública por la que se accede a Evolution (cámbiala por tu IP/dominio si la usas fuera del host)
+      - SERVER_URL=${EVOLUTION_SERVER_URL:-http://localhost:8080}
       - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
+      - AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=true
+
+      # Database
       - DATABASE_ENABLED=true
       - DATABASE_PROVIDER=postgresql
       - DATABASE_CONNECTION_URI=postgresql://evolution:evolution@postgres:5432/evolution?schema=public
       - DATABASE_CONNECTION_CLIENT_NAME=evolution_exchange
+      - DATABASE_SAVE_DATA_INSTANCE=true
+      - DATABASE_SAVE_DATA_NEW_MESSAGE=true
+      - DATABASE_SAVE_MESSAGE_UPDATE=true
+      - DATABASE_SAVE_DATA_CONTACTS=true
+      - DATABASE_SAVE_DATA_CHATS=true
+      - DATABASE_SAVE_DATA_LABELS=true
+      - DATABASE_SAVE_DATA_HISTORIC=true
+
+      # Cache (Redis)
       - CACHE_REDIS_ENABLED=true
       - CACHE_REDIS_URI=redis://redis:6379/6
       - CACHE_REDIS_PREFIX_KEY=evolution
+      - CACHE_REDIS_SAVE_INSTANCES=false
+      - CACHE_LOCAL_ENABLED=false
+
+      # Webhook global hacia tu bot (¡sin guion bajo en el host!)
       - WEBHOOK_GLOBAL_ENABLED=true
-      - WEBHOOK_GLOBAL_URL=http://chat_bot:8000/webhook/evolution
+      - WEBHOOK_GLOBAL_URL=http://chatbot:8000/webhook/evolution
       - WEBHOOK_GLOBAL_WEBHOOK_BY_EVENTS=false
       - WEBHOOK_EVENTS_MESSAGES_UPSERT=true
-      - CONFIG_SESSION_PHONE_CLIENT=Chat_bot
-      - CONFIG_SESSION_PHONE_NAME=Chrome
-      - QRCODE_LIMIT=30
+
+      # Comportamiento general
+      - DEL_INSTANCE=false
       - LANGUAGE=es
+      - QRCODE_LIMIT=30
+      - CONFIG_SESSION_PHONE_CLIENT=Chatbot
+      - CONFIG_SESSION_PHONE_NAME=Chrome
+
+      # Logs (útil para depurar el problema)
+      - LOG_LEVEL=ERROR,WARN,INFO,LOG,VERBOSE,DEBUG,WEBHOOKS
+      - LOG_COLOR=true
+      - LOG_BAILEYS=error
     volumes:
       - evolution_instances:/evolution/instances
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/ >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2024-10-13T13-34-11Z
+    container_name: chatbot_minio
     restart: unless-stopped
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
@@ -69,6 +109,7 @@ services:
 
   minio-init:
     image: minio/mc:latest
+    container_name: chatbot_minio_init
     depends_on:
       minio:
         condition: service_healthy
@@ -82,12 +123,13 @@ services:
       mc mb --ignore-existing local/$$MINIO_BUCKET;
       "
 
-  chat_bot:
+  chatbot:
     build: .
+    container_name: chatbot_app
     restart: unless-stopped
     depends_on:
       evolution-api:
-        condition: service_started
+        condition: service_healthy
       minio:
         condition: service_healthy
     environment:
