@@ -5,35 +5,148 @@ from app.utils.helpers import build_storage_path
 from app.logger import logger
 from app.config import settings
 from app.schemas.webhook import WebhookPayload
+from app.schemas.messages import IncomingMessage
+from app.services.providers import get_provider
+from app.services.dedup import message_dedup
 from mimetypes import guess_extension
 
 app = FastAPI()
 
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+
+# ── Evolution API endpoint ──────────────────────────────────────────────────
+
+@app.post("/webhook/evolution")
+async def evolution_webhook(request: Request):
+    """Recibe eventos de Evolution API y almacena los medios en MinIO."""
+    # Validar header apikey (Evolution envía el header "apikey")
+    apikey = request.headers.get("apikey")
+    if settings.EVOLUTION_API_KEY and apikey != settings.EVOLUTION_API_KEY:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="apikey inválida")
+
+    payload = await request.json()
+    provider = get_provider()
+
+    try:
+        messages = provider.parse_incoming(payload)
+    except Exception as ex:
+        logger.error(f"Error parseando payload de Evolution: {ex}")
+        return {"status": "ok", "processed": 0}
+
+    processed = 0
+    for msg in messages:
+        # Idempotencia
+        if message_dedup.contains(msg.message_id):
+            logger.info(
+                f"provider={msg.provider} instance={msg.instance} "
+                f"message_id={msg.message_id} DUPLICADO — omitido"
+            )
+            continue
+
+        logger.info(
+            f"provider={msg.provider} instance={msg.instance} "
+            f"message_id={msg.message_id} from={msg.from_number} "
+            f"media_type={msg.media_type} — procesando"
+        )
+
+        try:
+            content, content_type = provider.download_media(msg)
+        except Exception as ex:
+            logger.error(
+                f"Error descargando media message_id={msg.message_id}: {ex}"
+            )
+            continue
+
+        try:
+            folder, filename = build_storage_path(
+                from_number=msg.from_number,
+                timestamp=str(msg.timestamp),
+                msg_id=msg.message_id,
+                ext="bin",
+                mime_type=msg.mime_type,
+                original_filename=msg.filename,
+            )
+            upload_file_to_minio(
+                folder=folder,
+                filename=filename,
+                content=content,
+                content_type=content_type,
+                from_number=msg.from_number,
+                msg_id=msg.message_id,
+                provider=msg.provider,
+            )
+        except Exception as ex:
+            logger.error(
+                f"Error subiendo media message_id={msg.message_id}: {ex}"
+            )
+            continue
+
+        message_dedup.add(msg.message_id)
+        processed += 1
+
+    return {"status": "ok", "processed": processed}
+
+
+# ── WhatsApp Cloud API endpoints (activos solo si WHATSAPP_PROVIDER=cloud) ──
+
 @app.post("/webhook")
 async def whatsapp_webhook(payload: WebhookPayload):
+    if settings.WHATSAPP_PROVIDER != "cloud":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Endpoint Cloud API no activo. Usa WHATSAPP_PROVIDER=cloud",
+        )
+    provider = get_provider()
+    raw_payload = payload.model_dump(by_alias=True)
+
     try:
-        for entry in payload.entry or []:
-            for change in entry.changes or []:
-                messages = (change.value.messages or []) if change.value else []
-                for msg in messages:
-                    msg_type = msg.type
-                    if msg_type in ["image", "document", "video", "audio"]:
-                        media = getattr(msg, msg_type)
-                        if media:
-                            media_id = media.id
-                            mime_type = media.mime_type or "application/octet-stream"
-                            ext = (mime_type.split('/')[-1] if '/' in mime_type else mime_type)
-                            from_number = msg.from_
-                            timestamp = msg.timestamp
-                            msg_id = msg.id
-                            folder, filename = build_storage_path(from_number, timestamp, msg_id, ext)
-                            media_url = get_media_url(media_id)
-                            content, content_type = download_media(media_url)
-                            upload_file_to_minio(folder, filename, content, content_type)
+        messages = provider.parse_incoming(raw_payload)
     except Exception as ex:
-        logger.error(f"Error procesando webhook: {ex}")
+        logger.error(f"Error parseando payload Cloud API: {ex}")
         raise HTTPException(status_code=500, detail=str(ex))
+
+    for msg in messages:
+        if message_dedup.contains(msg.message_id):
+            logger.info(
+                f"provider={msg.provider} message_id={msg.message_id} DUPLICADO — omitido"
+            )
+            continue
+
+        logger.info(
+            f"provider={msg.provider} message_id={msg.message_id} "
+            f"from={msg.from_number} media_type={msg.media_type} — procesando"
+        )
+
+        try:
+            content, content_type = provider.download_media(msg)
+            folder, filename = build_storage_path(
+                from_number=msg.from_number,
+                timestamp=str(msg.timestamp),
+                msg_id=msg.message_id,
+                ext="bin",
+                mime_type=msg.mime_type,
+                original_filename=msg.filename,
+            )
+            upload_file_to_minio(
+                folder=folder,
+                filename=filename,
+                content=content,
+                content_type=content_type,
+                from_number=msg.from_number,
+                msg_id=msg.message_id,
+                provider=msg.provider,
+            )
+            message_dedup.add(msg.message_id)
+        except Exception as ex:
+            logger.error(f"Error procesando mensaje {msg.message_id}: {ex}")
+            continue
+
     return {"status": "ok"}
+
 
 @app.get("/webhook")
 async def verify_whatsapp(

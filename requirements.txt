@@ -2,6 +2,11 @@ fastapi
 uvicorn
 python-dotenv
 requests
+httpx
 boto3
 werkzeug
 pydantic
+
+# Dev / testing
+pytest
+pytest-asyncio
