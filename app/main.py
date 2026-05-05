@@ -23,10 +23,15 @@ async def health():
 @app.post("/webhook/evolution")
 async def evolution_webhook(request: Request):
     """Recibe eventos de Evolution API y almacena los medios en MinIO."""
-    # Validar header apikey (Evolution envía el header "apikey")
+    # Loguear el apikey recibido (Evolution envía el token de instancia, no la clave global)
     apikey = request.headers.get("apikey")
-    if settings.EVOLUTION_API_KEY and apikey != settings.EVOLUTION_API_KEY:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="apikey inválida")
+    logger.info(f"webhook/evolution apikey={apikey!r}")
+
+    # Validar secreto propio si está configurado (header x-webhook-secret)
+    if settings.WEBHOOK_SECRET:
+        received_secret = request.headers.get("x-webhook-secret")
+        if received_secret != settings.WEBHOOK_SECRET:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="x-webhook-secret inválido")
 
     payload = await request.json()
     provider = get_provider()

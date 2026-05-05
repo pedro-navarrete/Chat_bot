@@ -53,7 +53,8 @@ services:
       - DATABASE_SAVE_DATA_CONTACTS=true
       - DATABASE_SAVE_DATA_CHATS=true
       - DATABASE_SAVE_DATA_LABELS=true
-      - DATABASE_SAVE_DATA_HISTORIC=true
+      - DATABASE_SAVE_DATA_HISTORIC=false
+      - SYNC_FULL_HISTORY=false
 
       # Cache (Redis)
       - CACHE_REDIS_ENABLED=true
@@ -76,7 +77,7 @@ services:
       - CONFIG_SESSION_PHONE_NAME=Chrome
 
       # Logs (útil para depurar el problema)
-      - LOG_LEVEL=ERROR,WARN,INFO,LOG,VERBOSE,DEBUG,WEBHOOKS
+      - LOG_LEVEL=ERROR,WARN,INFO,LOG
       - LOG_COLOR=true
       - LOG_BAILEYS=error
     volumes:
@@ -141,6 +142,7 @@ services:
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
       - MINIO_BUCKET=${MINIO_BUCKET:-whatsapp-files}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:-}
     ports:
       - "8000:8000"
 
