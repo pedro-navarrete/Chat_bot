@@ -25,7 +25,7 @@ async def evolution_webhook(request: Request):
     """Recibe eventos de Evolution API y almacena los medios en MinIO."""
     # Loguear si se recibió apikey (Evolution envía el token de instancia, no la clave global)
     apikey = request.headers.get("apikey")
-    logger.info(f"webhook/evolution apikey={'present' if apikey else 'missing'}")
+    logger.debug(f"webhook/evolution apikey={'present' if apikey else 'missing'}")
 
     # Validar secreto propio si está configurado (header x-webhook-secret)
     if settings.WEBHOOK_SECRET:
