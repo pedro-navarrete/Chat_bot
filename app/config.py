@@ -17,6 +17,7 @@ class Settings:
     EVOLUTION_URL = os.getenv("EVOLUTION_URL", "http://evolution-api:8080")
     EVOLUTION_API_KEY = os.getenv("EVOLUTION_API_KEY")
     EVOLUTION_INSTANCE = os.getenv("EVOLUTION_INSTANCE", "default")
+    WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
 
     # ── MinIO ───────────────────────────────────────────────────────────────
     MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "localhost:9000")
