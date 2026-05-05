@@ -19,7 +19,7 @@ services:
     restart: unless-stopped
 
   evolution-api:
-    image: atendai/evolution-api:latest
+    image: evoapicloud/evolution-api:v2.3.7
     restart: unless-stopped
     depends_on:
       postgres:
@@ -44,6 +44,8 @@ services:
       - WEBHOOK_EVENTS_MESSAGES_UPSERT=true
       - CONFIG_SESSION_PHONE_CLIENT=Chat_bot
       - CONFIG_SESSION_PHONE_NAME=Chrome
+      - QRCODE_LIMIT=30
+      - LANGUAGE=es
     volumes:
       - evolution_instances:/evolution/instances
 
