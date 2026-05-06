@@ -41,7 +41,8 @@ def build_storage_path(
 
     if original_filename:
         safe_original = secure_filename(original_filename)
-        filename = secure_filename(f"{msg_id}_{safe_original}")
+        #filename = secure_filename(f"{msg_id}_{safe_original}")
+        filename = safe_original
     else:
         filename = secure_filename(f"{msg_id}.{ext}")
 

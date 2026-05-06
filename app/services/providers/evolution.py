@@ -69,6 +69,30 @@ class EvolutionProvider(WhatsAppProvider):
             from_number = remote_jid.split("@")[0]
 
             message_obj = item.get("message", {})
+            # Procesar mensajes de texto simples
+            if "conversation" in message_obj:
+                msg_id = key.get("id", "")
+                timestamp = int(item.get("messageTimestamp", 0))
+                messages.append(
+                    IncomingMessage(
+                        provider="evolution",
+                        instance=instance,
+                        message_id=msg_id,
+                        from_number=from_number,
+                        timestamp=timestamp,
+                        media_type="text",
+                        mime_type="text/plain",
+                        filename=None,
+                        raw={
+                            "key": key,
+                            "message": message_obj,
+                            "instance": instance,
+                            "text": message_obj["conversation"],
+                        },
+                    )
+                )
+                continue
+
             extracted = _extract_media_info(message_obj)
             if extracted is None:
                 continue

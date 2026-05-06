@@ -2,6 +2,7 @@ import boto3
 from botocore.client import Config
 from app.config import settings
 from app.logger import logger
+import json
 
 
 def get_s3_client():
@@ -46,3 +47,33 @@ def upload_file_to_minio(
     except Exception as ex:
         logger.error(f"Error subiendo archivo a MinIO - {ex}")
         return False
+
+
+def upload_metadata_json_to_minio(
+    folder: str,
+    base_filename: str,
+    nombre: str,
+    dui: str,
+    from_number: str = "",
+    msg_id: str = "",
+    provider: str = "",
+) -> bool:
+    """
+    Sube un archivo JSON con los metadatos (nombre y dui) junto al archivo principal en MinIO.
+    El archivo se llamará igual que el archivo principal pero con extensión .json
+    """
+    metadata = {
+        "nombre": nombre,
+        "dui": dui,
+    }
+    json_bytes = json.dumps(metadata, ensure_ascii=False).encode("utf-8")
+    json_filename = base_filename.rsplit(".", 1)[0] + ".json"
+    return upload_file_to_minio(
+        folder=folder,
+        filename=json_filename,
+        content=json_bytes,
+        content_type="application/json",
+        from_number=from_number,
+        msg_id=msg_id,
+        provider=provider,
+    )
